@@ -142,7 +142,7 @@ export default {
     padding: 30px;
     border-radius: 10px;
     width: 90%;
-    max-width: 600px;
+    max-width: 60vw;
     position: relative;
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
 }
@@ -211,7 +211,7 @@ export default {
 
 .main-image {
     width: 100%;
-    height: 300px;
+    height: 50vh;
     object-fit: contain;
     border: 1px solid #eee;
     border-radius: 5px;
