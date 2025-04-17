@@ -1,19 +1,22 @@
 <template>
   <div class="cart-modal-overlay" v-if="isOpen" @click.self="close">
-    <div class="cart-modal">
+    <div  class="cart">
+      <div class="cart-modal">
       <div class="cart-header">
         <h2>Seu Carrinho</h2>
         <button class="close-btn" @click="close">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
       </div>
-      
+
       <div class="cart-content">
         <div v-if="cartItems.length === 0" class="empty-cart">
-          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="9" cy="21" r="1"></circle>
             <circle cx="20" cy="21" r="1"></circle>
             <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
@@ -21,29 +24,31 @@
           <p>Seu carrinho está vazio</p>
           <button class="btn continue-shopping" @click="close">Continuar Comprando</button>
         </div>
-        
+
         <div v-else>
           <div class="cart-items">
             <div v-for="(item, index) in cartItems" :key="item.id" class="cart-item">
               <img :src="item.imagem" :alt="item.nome" class="item-image">
               <div class="item-details">
                 <h3>{{ item.nome }}</h3>
-                <p class="item-price">{{ formatPrice(calculateItemTotal(item)) }}</p>
+                <p class="item-price">{{ formatPrice(item.preco) }}</p>
               </div>
               <div class="item-quantity">
-                <button class="qty-btn" @click="decreaseQuantity(index)" :disabled="item.quantidade <= 1">-</button>
-                <span>{{ item.quantidade }}</span>
-                <button class="qty-btn" @click="increaseQuantity(index)" :disabled="item.quantidade >= item.estoque">+</button>
+                <button class="qty-btn" @click="decreaseQuantity(item.id)" :disabled="item.quantity <= 1">-</button>
+                <span>{{ item.quantity }}</span>
+                <button class="qty-btn" @click="increaseQuantity(item.id)"
+                  :disabled="item.quantity >= item.estoque">+</button>
               </div>
               <button class="remove-btn" @click="removeItem(index)">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="3 6 5 6 21 6"></polyline>
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
               </button>
             </div>
           </div>
-          
+
           <div class="cart-summary">
             <div class="summary-row">
               <span>Subtotal:</span>
@@ -66,11 +71,12 @@
         </div>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
 <script>
-import ProductService from '@/services/ProductsService';
+import CartService from '~/services/CartService';
 
 export default {
   name: 'CartModal',
@@ -78,226 +84,67 @@ export default {
     isOpen: {
       type: Boolean,
       default: false
-    },
-    cartItems: {
-      type: Array,
-      required: true
     }
   },
   data() {
     return {
-      localCart: [], // Cópia local do carrinho
+      cartItems: [],
+      unsubscribe: null
     };
-  },
-  created() {
-    this.loadCartFromLocalStorage();
   },
   computed: {
     subtotal() {
       return this.cartItems.reduce((total, item) => {
-        return total + this.calculateItemTotal(item);
+        return total + (parseFloat(item.preco) * item.quantity);
       }, 0);
     },
     frete() {
-      return this.subtotal > 200 ? 'Grátis' : 'R$ 15,00';
+      return this.subtotal > 200 ? 'Grátis' : this.formatPrice(15);
     },
     total() {
-      const freteValue = this.frete === 'Grátis' ? 0 : 15;
-      return this.subtotal + freteValue;
+      return this.subtotal + (this.subtotal > 200 ? 0 : 15);
     }
   },
   methods: {
-    calculateItemTotal(item) {
-      // Converte o preço (string) para número e multiplica pela quantidade
-      const price = parseFloat(item.preco);
-      return price * item.quantidade;
-    },
     close() {
       this.$emit('close');
     },
-    async increaseQuantity(index) {
-      if (this.cartItems[index].quantidade < this.cartItems[index].estoque) {
-        // Verificar estoque atualizado
-        try {
-          const productId = this.cartItems[index].id;
-          let currentStock = this.cartItems[index].estoque;
-          
-          // Tentar obter dados atualizados do produto
-          try {
-            const productData = await this.getProductFromCacheOrAPI(productId);
-            if (productData) {
-              currentStock = productData.estoque;
-            }
-          } catch (error) {
-            console.log('Usando dados de estoque em cache');
-          }
-          
-          if (this.cartItems[index].quantidade < currentStock) {
-            const updatedCart = [...this.cartItems];
-            updatedCart[index] = {
-              ...updatedCart[index],
-              quantidade: updatedCart[index].quantidade + 1,
-              estoque: currentStock // Atualizar o estoque com o valor mais recente
-            };
-            this.$emit('update-cart', updatedCart);
-            this.saveCartToLocalStorage(updatedCart);
-          } else {
-            alert('Estoque insuficiente!');
-          }
-        } catch (error) {
-          console.error('Erro ao verificar estoque:', error);
-          // Continuar com dados em cache
-          const updatedCart = [...this.cartItems];
-          updatedCart[index] = {
-            ...updatedCart[index],
-            quantidade: updatedCart[index].quantidade + 1
-          };
-          this.$emit('update-cart', updatedCart);
-          this.saveCartToLocalStorage(updatedCart);
-        }
-      }
+    formatPrice(value) {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      }).format(value);
     },
-    decreaseQuantity(index) {
-      if (this.cartItems[index].quantidade > 1) {
-        const updatedCart = [...this.cartItems];
-        updatedCart[index] = {
-          ...updatedCart[index],
-          quantidade: updatedCart[index].quantidade - 1
-        };
-        this.$emit('update-cart', updatedCart);
-        this.saveCartToLocalStorage(updatedCart);
-      }
+    increaseQuantity(productId) {
+      CartService.incrementQuantity(productId);
+    },
+    decreaseQuantity(productId) {
+      CartService.decrementQuantity(productId);
     },
     removeItem(index) {
-      const updatedCart = this.cartItems.filter((_, i) => i !== index);
-      this.$emit('update-cart', updatedCart);
-      this.saveCartToLocalStorage(updatedCart);
+      const productId = this.cartItems[index].id;
+      CartService.removeFromCart(productId);
     },
-    async checkout() {
-      try {
-        // Verificar estoque atualizado para todos os itens antes de finalizar
-        const outOfStockItems = [];
-        
-        for (const item of this.cartItems) {
-          try {
-            const productData = await this.getProductFromCacheOrAPI(item.id);
-            if (productData && item.quantidade > productData.estoque) {
-              outOfStockItems.push({
-                nome: item.nome,
-                quantidade: item.quantidade,
-                estoqueDisponivel: productData.estoque
-              });
-            }
-          } catch (error) {
-            console.log(`Usando dados em cache para ${item.nome}`);
-          }
-        }
-        
-        if (outOfStockItems.length > 0) {
-          let message = 'Não foi possível finalizar a compra devido a indisponibilidade de estoque:\n\n';
-          outOfStockItems.forEach(item => {
-            message += `- ${item.nome}: Solicitado: ${item.quantidade}, Disponível: ${item.estoqueDisponivel}\n`;
-          });
-          alert(message);
-          return;
-        }
-        
-        alert('Compra finalizada com sucesso!');
-        const emptyCart = [];
-        this.$emit('update-cart', emptyCart);
-        this.saveCartToLocalStorage(emptyCart);
-        this.close();
-      } catch (error) {
-        console.error('Erro ao finalizar compra:', error);
-        alert('Erro ao finalizar compra. Por favor, tente novamente.');
-      }
-    },
-    formatPrice(value) {
-      if (value === undefined || value === null || isNaN(Number(value))) {
-        return 'R$ 0,00';
-      }
-      
-      const numValue = Number(value);
-      const fixedValue = numValue.toFixed(2);
-      const formattedValue = fixedValue.replace('.', ',');
-      
-      // Adiciona separador de milhares
-      const parts = formattedValue.split(',');
-      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-      
-      return `R$ ${parts.join(',')}`;
-    },
-    saveCartToLocalStorage(cart) {
-      localStorage.setItem('shoppingCart', JSON.stringify(cart));
-    },
-    loadCartFromLocalStorage() {
-      try {
-        const savedCart = localStorage.getItem('shoppingCart');
-        if (savedCart) {
-          const parsedCart = JSON.parse(savedCart);
-          // Verificar e atualizar os dados do carrinho com informações mais recentes
-          this.updateCartWithLatestData(parsedCart);
-        }
-      } catch (error) {
-        console.error('Erro ao carregar carrinho do localStorage:', error);
-      }
-    },
-    async updateCartWithLatestData(cartItems) {
-      try {
-        const updatedCart = [...cartItems];
-        let hasUpdates = false;
-        
-        // Verificar se temos dados mais atualizados para cada produto
-        for (let i = 0; i < updatedCart.length; i++) {
-          const item = updatedCart[i];
-          try {
-            const productData = await this.getProductFromCacheOrAPI(item.id);
-            if (productData) {
-              // Atualizar informações do produto, mantendo a quantidade
-              updatedCart[i] = {
-                ...productData,
-                quantidade: item.quantidade,
-                // Garantir que não ultrapassamos o estoque disponível
-                quantidade: Math.min(item.quantidade, productData.estoque)
-              };
-              hasUpdates = true;
-            }
-          } catch (error) {
-            console.log(`Mantendo dados em cache para o produto ${item.nome}`);
-          }
-        }
-        
-        if (hasUpdates) {
-          this.$emit('update-cart', updatedCart);
-          this.saveCartToLocalStorage(updatedCart);
-        } else {
-          this.$emit('update-cart', cartItems);
-        }
-      } catch (error) {
-        console.error('Erro ao atualizar carrinho com dados mais recentes:', error);
-        this.$emit('update-cart', cartItems);
-      }
-    },
-    async getProductFromCacheOrAPI(productId) {
-      try {
-        // Tenta obter do localStorage primeiro (implementado no ProductService)
-        const cachedProducts = JSON.parse(localStorage.getItem('products') || '[]');
-        const cachedProduct = cachedProducts.find(p => p.id === productId);
-        
-        if (cachedProduct) {
-          return cachedProduct;
-        }
-        
-        // Se não encontrar no cache, buscar da API
-        return await ProductService.getProductById(productId);
-      } catch (error) {
-        console.error(`Erro ao buscar produto ${productId}:`, error);
-        throw error;
-      }
+    checkout() {
+      alert('Finalizando compra...');
     }
+  },
+  mounted() {
+    // Carrega os dados iniciais e se inscreve para atualizações do carrinho
+    this.unsubscribe = CartService.subscribe((items) => {
+      this.cartItems = items;
+    });
+
+    // Força o carregamento inicial do carrinho (caso o subscribe não chame imediatamente)
+    CartService.loadCartFromStorage();
+  },
+  beforeUnmount() {
+    // Cancela a inscrição para evitar vazamento de memória
+    if (this.unsubscribe) this.unsubscribe();
   }
-}
+};
 </script>
+
 
 <style scoped>
 .cart-modal-overlay {
@@ -312,17 +159,23 @@ export default {
   align-items: center;
   z-index: 1100;
 }
-
 .cart-modal {
   background-color: var(--white);
-  border-radius: 10px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 90vh;
+  width: 100%;
+  max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 5px 30px rgba(0, 0, 0, 0.2);
 }
-
+.cart{
+  display: flex;
+  width: 60%;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  box-sizing: border-box;
+  box-shadow: 0 5px 30px rgba(0, 0, 0, 0.2);
+  padding: 20px;
+}
 .cart-header {
   display: flex;
   justify-content: space-between;
@@ -495,18 +348,20 @@ export default {
 }
 
 .checkout:hover {
-  background-color: #14539a; 
+  background-color: #14539a;
 }
 
 @media (max-width: 576px) {
   .cart-actions {
     flex-direction: column;
   }
-  
+  .cart{
+    width: 90%;
+  }
   .cart-item {
     flex-wrap: wrap;
   }
-  
+
   .item-quantity {
     margin: 10px 0;
   }

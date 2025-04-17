@@ -1,40 +1,24 @@
 <template>
   <div id="app">
-    <AppHeader 
-      :cartItems="cartItems" 
-      @open-cart="isCartOpen = true"
-    />
-    
-    <CartModal 
-      :isOpen="isCartOpen" 
-      :cartItems="cartItems" 
-      @close="isCartOpen = false"
-      @update-quantity="updateCartItemQuantity"
-      @remove-item="removeCartItem"
-      @checkout="checkoutCart"
-    />
-    
+    <AppHeader :cartItems="cartItems" @open-cart="isCartOpen = true" />
+    <Hero />
+    <Features />
+    <CartModal :isOpen="isCartOpen" :cartItems="cartItems" @close="isCartOpen = false"
+      @update-quantity="updateCartItemQuantity" @remove-item="removeCartItem" @checkout="checkoutCart" />
     <div v-if="loading" class="loading-container">
       <p>Carregando produtos...</p>
     </div>
-    
+
     <div v-else-if="error" class="error-container">
       <p>{{ error }}</p>
       <button class="btn" @click="fetchData">Tentar novamente</button>
     </div>
-    
-    <Products 
-      v-else
-      :products="filteredProducts" 
-      :categories="categories" 
-      :selectedCategory="selectedCategory"
-      @select-category="filterByCategory"
-      @add-to-cart="addProductToCart"
-    />
-    
-    <Features/> 
-   <Testimonials :testimonials="testimonials"/> 
-    <AppFooter/>
+
+    <Products v-else :products="filteredProducts" :categories="categories" :selectedCategory="selectedCategory"
+      @select-category="filterByCategory" @add-to-cart="addProductToCart" />
+
+    <Testimonials :testimonials="testimonials" />
+    <AppFooter />
   </div>
 </template>
 
@@ -42,8 +26,12 @@
 import AppHeader from './components/AppHeader.vue';
 import Products from './components/Products.vue';
 import CartModal from './components/CartModal.vue';
-import ProductService from './services/ProductsService';
+import Features from './components/Features.vue';
 import Testimonials from './components/Testimonials.vue';
+import AppFooter from './components/AppFooter.vue';
+import ProductService from './services/ProductsService';
+import CartService from './services/CartService';
+
 
 export default {
   name: 'App',
@@ -51,15 +39,10 @@ export default {
     AppHeader,
     Products,
     CartModal,
-    Testimonials
+    Features,
+    Testimonials,
+    AppFooter
   },
-  name: 'Testimonials',
-    props: {
-      testimonials: {
-        type: Array,
-        required: true
-      }
-    },
   data() {
     return {
       testimonials: [
@@ -82,33 +65,47 @@ export default {
       categories: ['Todos'],
       products: [],
       loading: true,
-      error: null
+      error: null,
+      cartCount: 0,
     }
   },
   computed: {
     filteredProducts() {
-      if (this.selectedCategory === 'Todos') {
+      // Se a categoria for "Todos" ou 0, retorne todos os produtos
+      if (this.selectedCategory === 'Todos' || this.selectedCategory === 0) {
         return this.products;
       }
-      return this.products.filter(product => product.categoria.nome === this.selectedCategory);
+      const filtered = this.products.filter(product => {
+        return product.categoria && product.categoria === this.selectedCategory;
+      });
+
+      return filtered;
     }
   },
   created() {
     this.fetchData();
+    this.loadCartFromStorage();
+    this.unsubscribeCart = CartService.subscribe(this.updateCartCount);
   },
+  beforeDestroy() {
+  if (this.unsubscribeCart) {
+    this.unsubscribeCart(); // Remove o listener
+  }
+},
+
   methods: {
+    updateCartCount(cartItems) {
+      this.cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
+      this.cartItems = cartItems;
+    },
     async fetchData() {
       this.loading = true;
       this.error = null;
-      
+
       try {
-        // Buscar produtos
         const productsData = await ProductService.getProducts();
         this.products = productsData;
-        
-        // Extrair categorias únicas dos produtos
-        // (Caso não tenha um endpoint específico para categorias)
-        const uniqueCategories = [...new Set(productsData.map(product => product.categoria.nome))];
+        const uniqueCategories = [...new Set(productsData.map(product => product.categoria))];
         this.categories = ['Todos', ...uniqueCategories];
       } catch (error) {
         this.error = 'Não foi possível carregar os dados. Por favor, tente novamente mais tarde.';
@@ -117,69 +114,56 @@ export default {
         this.loading = false;
       }
     },
-    
-    async filterByCategory(category) {
-      this.selectedCategory = category;
-      
-      // Se não for a categoria "Todos", buscar produtos específicos
-      if (category !== 'Todos') {
-        this.loading = true;
-        try {
-          // Encontrar o slug da categoria selecionada
-          const categorySlug = this.getCategorySlug(category);
-          if (categorySlug) {
-            const productsData = await ProductService.getProductsByCategory(categorySlug);
-            this.products = productsData;
-          }
-        } catch (error) {
-          console.error('Erro ao filtrar por categoria:', error);
-        } finally {
-          this.loading = false;
-        }
-      } else {
-        // Se for "Todos", carregar todos os produtos novamente
-        this.fetchData();
-      }
+
+    loadCartFromStorage() {
+      this.cartItems = CartService.getCartItems();
     },
-    
-    // Método auxiliar para encontrar o slug da categoria pelo nome
-    getCategorySlug(categoryName) {
-      // Você precisará adaptar isso de acordo com a estrutura dos seus dados
-      // Este é apenas um exemplo
-      const product = this.products.find(p => p.categoria.nome === categoryName);
-      return product ? product.categoria.slug : null;
+
+    filterByCategory(category) {
+      this.selectedCategory = typeof category === 'string' ? category : Number(category);
     },
-    
+
+    getCategoryId(categoryName) {
+      const product = this.products.find(p => p.categoria === categoryName);
+      return product ? product.categoria : null;
+    },
+
     addProductToCart(product) {
-      // Verifica se o produto já está no carrinho
-      const existingItem = this.cartItems.find(item => item.id === product.id);
-      
-      if (existingItem) {
-        this.updateCartItemQuantity({
-          index: this.cartItems.indexOf(existingItem),
-          quantity: existingItem.quantity + 1
-        });
-      } else {
-        this.cartItems.push({
-          ...product,
-          quantity: 1
-        });
-      }
+      // Usando o CartService para adicionar ao carrinho
+      CartService.addToCart(product);
+
+      // Atualizando o estado local do carrinho
+      this.cartItems = CartService.getCartItems();
     },
-    
+
     updateCartItemQuantity({ index, quantity }) {
-      this.cartItems[index].quantity = quantity;
+      const productId = this.cartItems[index].id;
+
+      // Usando o CartService para atualizar a quantidade
+      CartService.updateQuantity(productId, quantity);
+
+      // Atualizando o estado local do carrinho
+      this.cartItems = CartService.getCartItems();
     },
-    
+
     removeCartItem(index) {
-      this.cartItems.splice(index, 1);
+      const productId = this.cartItems[index].id;
+
+      // Usando o CartService para remover o item
+      CartService.removeFromCart(productId);
+
+      // Atualizando o estado local do carrinho
+      this.cartItems = CartService.getCartItems();
     },
-    
+
     checkoutCart() {
-      // Lógica para finalizar a compra
-      // Futuramente você pode adicionar um endpoint de checkout na API
       alert('Compra finalizada com sucesso!');
-      this.cartItems = []; 
+
+      // Limpar o carrinho usando o CartService
+      CartService.clearCart();
+
+      // Atualizar o estado local
+      this.cartItems = [];
       this.isCartOpen = false;
     }
   }
@@ -238,10 +222,11 @@ body {
 }
 
 #app {
-  padding-top: 80px; /* Espaço para o header fixo */
+  padding-top: 80px;
+  /* Espaço para o header fixo */
 }
 
-.loading-container, 
+.loading-container,
 .error-container {
   text-align: center;
   padding: 40px;

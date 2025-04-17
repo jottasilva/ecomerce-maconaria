@@ -22,7 +22,6 @@
     align-items: center;
     text-align: center;
     color: var(--white);
-    margin-top: 80px;
   }
   
   .hero-content {

@@ -1,33 +1,36 @@
 <template>
+  <ProductModalDetails 
+    :isOpen="isDetailModal" 
+    :product="selectedProduct" 
+    @close="isDetailModal = false" 
+    @add-to-cart="handleAddToCart" 
+  />
+  
   <section class="products" id="produtos">
     <div class="container">
       <h2 class="section-title">Produtos em Destaque</h2>
       <div class="categories">
-        <button 
-          v-for="category in categories" 
-          :key="category"
-          class="category-btn" 
-          :class="{ active: selectedCategory === category }"
-          @click="selectCategory(category)"
-        >
-          {{ category }}
+        <button v-for="category in categories" :key="category.id || category" class="category-btn"
+          :class="{ active: selectedCategory === (category.nome || category) }" @click="selectCategory(category.id)">
+          {{ category.nome }}
         </button>
       </div>
-      <div class="products-grid">
-        <div 
-          v-for="product in filteredProducts" 
-          :key="product.id"
-          class="product-card"
-        >
-          <img :src="product.imagem" :alt="product.nome" class="product-img">
+      <div v-if="isLoading" class="loading">Carregando produtos...</div>
+      <div v-else-if="filteredProducts.length === 0" class="no-products">
+        <p>Não há produtos disponíveis nesta categoria.</p>
+        <button class="btn return-btn" @click="selectCategory('Todos')">
+          Voltar para todos os produtos
+        </button>
+      </div>
+      
+      <div v-else class="products-grid">
+        <div v-for="product in filteredProducts" :key="product.id" class="product-card">
+          <img @click="productDetail(product)" :src="product.imagem" :alt="product.nome" class="product-img">
           <div class="product-details">
             <h3 class="product-title">{{ product.nome }}</h3>
-            <p class="product-price">R$ {{ product.preco}}</p>
-            <button 
-              class="btn add-to-cart"
-              :class="{ added: product.added }"
-              @click="addToCart(product)"
-            >
+            <p class="product-price">{{ formatPrice(product.preco) }}</p>
+            
+            <button class="btn add-to-cart" :class="{ added: product.added }" @click="addToCart(product)">
               {{ product.added ? 'Adicionado!' : 'Adicionar ao Carrinho' }}
             </button>
           </div>
@@ -38,45 +41,162 @@
 </template>
 
 <script>
+import ProductService from '~/services/ProductsService';
+import CartService from '~/services/CartService';
+import ProductModalDetails from '~/components/ProductModalDetails'; // Certifique-se de importar o componente
+
 export default {
   name: 'Products',
+  components: {
+    ProductModalDetails
+  },
   props: {
     products: {
       type: Array,
+      default: () => [],
       required: true
     },
-    categories: {
+    produtctDetail: {
       type: Array,
-      required: true
+      default: () => {}
     },
-    selectedCategory: {
-      type: String,
-      required: true
-    }
+    
+  },
+  data() {
+    return {
+      categories: [],
+      selectedCategory: 'Todos',
+      isLoading: true,
+      localProducts: [],
+      cartCount: 0,
+      isDetailModal: false,
+      selectedProduct: null
+    };
   },
   computed: {
     filteredProducts() {
-      if (this.selectedCategory === 'Todos') {
-        return this.products;
+      return this.products && this.products.length ? this.products : this.localProducts || [];
+    }
+  },
+  watch: {
+    products: {
+      immediate: true,
+      handler(newProducts) {
+        if (newProducts && newProducts.length) {
+          this.localProducts = [...newProducts];
+          if (newProducts.length === 0 && this.selectedCategory !== 'Todos') {
+            this.$emit('empty-category', this.selectedCategory);
+          }
+        } else {
+          this.localProducts = [];
+        }
       }
-      return this.products.filter(product => product.category === this.selectedCategory);
     }
   },
   methods: {
-    selectCategory(category) {
-      this.$emit('select-category', category);
+    formatPrice(price) {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      }).format(price);
     },
+    selectCategory(categoryName) {
+      this.selectedCategory = categoryName;
+      this.$emit('select-category', categoryName);
+    },
+    productDetail(product) {
+      this.selectedProduct = product;
+      this.isDetailModal = true;
+    },
+    
+    // Método para adicionar ao carrinho a partir da lista de produtos
     addToCart(product) {
-      this.$emit('add-to-cart', product);
-      
-      // Visual feedback
+      const cartItem = CartService.getCartItems().find(item => item.id === product.id);
+      const currentQuantity = cartItem ? cartItem.quantity : 0;
+
+      if (currentQuantity >= product.estoque) {
+        alert('Estoque insuficiente para adicionar mais unidades deste produto.');
+        return;
+      }
+
+      CartService.addToCart(product);
       product.added = true;
       setTimeout(() => {
         product.added = false;
       }, 1500);
+      this.$emit('update-cart-count', CartService.getCartCount());
+    },
+    
+    // Novo método para adicionar ao carrinho a partir do modal de detalhes
+    handleAddToCart({ product, quantity }) {
+      const cartItem = CartService.getCartItems().find(item => item.id === product.id);
+      const currentQuantity = cartItem ? cartItem.quantity : 0;
+      
+      if (currentQuantity + quantity > product.estoque) {
+        alert('Estoque insuficiente para adicionar a quantidade selecionada deste produto.');
+        return;
+      }
+      
+      // Adiciona a quantidade especificada ao carrinho
+      for (let i = 0; i < quantity; i++) {
+        CartService.addToCart(product);
+      }
+      
+      // Mostra feedback visual
+      if (product.id) {
+        const productInGrid = this.filteredProducts.find(p => p.id === product.id);
+        if (productInGrid) {
+          productInGrid.added = true;
+          setTimeout(() => {
+            productInGrid.added = false;
+          }, 1500);
+        }
+      }
+      
+      // Atualiza o contador do carrinho
+      this.$emit('update-cart-count', CartService.getCartCount());
+      
+      // Opcional: mostra mensagem de confirmação
+      alert(`${quantity} unidade(s) de ${product.nome} adicionada(s) ao carrinho!`);
+    },
+    
+    async loadCategories() {
+      try {
+        this.isLoading = true;
+        const categoriesData = await ProductService.getCategories();
+        if (!categoriesData.find(cat => (cat.nome || cat) === 'Todos')) {
+          this.categories = [{ id: 0, nome: 'Todos' }, ...categoriesData];
+        } else {
+          this.categories = categoriesData;
+        }
+        this.selectedCategory = 'Todos';
+      } catch (error) {
+        console.error('Erro ao carregar categorias:', error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    async loadProductsIfNeeded() {
+      if ((!this.products || !this.products.length) && !this.localProducts.length) {
+        try {
+          this.isLoading = true;
+          const productsData = await ProductService.getProducts();
+          this.localProducts = productsData;
+        } catch (error) {
+          console.error('Erro ao carregar produtos:', error);
+        } finally {
+          this.isLoading = false;
+        }
+      }
     }
+  },
+  created() {
+    this.loadCategories();
+    this.loadProductsIfNeeded();
+    this.cartItems = CartService.getCartItems();
+    this.cartCount = CartService.getCartCount();
   }
-}
+};
 </script>
 
 <style scoped>
@@ -102,13 +222,23 @@ export default {
   transition: all 0.3s;
 }
 
-.category-btn:hover, .category-btn.active {
+.category-btn:hover,
+.category-btn.active {
   background-color: var(--primary);
   color: var(--white);
 }
 
+.loading,
+.no-products {
+  text-align: center;
+  padding: 40px;
+  font-size: 18px;
+  color: var(--gray);
+}
+
 .products-grid {
   display: grid;
+  cursor: pointer;
   grid-template-columns: repeat(4, 1fr);
   gap: 30px;
 }
@@ -136,8 +266,9 @@ export default {
 }
 
 .product-title {
-  margin-bottom: 10px;
+  margin-bottom: 5px;
   font-size: 18px;
+  color: #777777;
 }
 
 .product-price {
@@ -147,8 +278,14 @@ export default {
   margin-bottom: 15px;
 }
 
+.return-btn {
+  margin: 50px 0;
+}
+
 .add-to-cart {
   width: 100%;
+  font-weight: bold;
+  color: black;
   text-align: center;
 }
 

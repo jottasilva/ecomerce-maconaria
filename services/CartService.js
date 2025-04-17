@@ -1,102 +1,214 @@
 // src/services/CartService.js
+
 class CartService {
-    static STORAGE_KEY = 'shoppingCart';
+  static CART_KEY = 'shopping-cart';
+  static listeners = [];
   
-    // Obter carrinho do localStorage
-    static getCart() {
-      try {
-        const cartData = localStorage.getItem(this.STORAGE_KEY);
-        return cartData ? JSON.parse(cartData) : [];
-      } catch (error) {
-        console.error('Erro ao carregar carrinho do localStorage:', error);
-        return [];
-      }
+  /**
+   * Subscribe to cart changes
+   * @param {Function} callback - Function to call when cart changes
+   * @returns {Function} Unsubscribe function
+   */
+  static subscribe(callback) {
+    this.listeners.push(callback);
+    
+    // Immediately notify with current state
+    callback(this.getCartItems());
+    
+    // Return unsubscribe function
+    return () => {
+      this.listeners = this.listeners.filter(listener => listener !== callback);
+    };
+  }
+  
+  /**
+   * Notify all listeners of cart changes
+   * @param {Array} cartItems - Updated cart items
+   */
+  static notifyListeners(cartItems) {
+    this.listeners.forEach(listener => listener(cartItems));
+  }
+  
+  /**
+   * Check if localStorage is available
+   * @returns {Boolean} True if localStorage is available
+   */
+  static isLocalStorageAvailable() {
+    try {
+      const testKey = '__test__';
+      localStorage.setItem(testKey, testKey);
+      localStorage.removeItem(testKey);
+      return true;
+    } catch (e) {
+      return false;
     }
-  
-    // Salvar carrinho no localStorage
-    static saveCart(cart) {
-      try {
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(cart));
-      } catch (error) {
-        console.error('Erro ao salvar carrinho no localStorage:', error);
-      }
-    }
-  
-    // Adicionar item ao carrinho
-    static addItem(product, quantity = 1) {
-      const cart = this.getCart();
+  }
+
+  /**
+   * Retrieve cart items from localStorage
+   * @returns {Array} Array of cart items or empty array if none found
+   */
+  static getCartItems() {
+    try {
+      if (!this.isLocalStorageAvailable()) return [];
       
-      // Verifica se o produto já está no carrinho
-      const existingItemIndex = cart.findIndex(item => item.id === product.id);
-      
-      if (existingItemIndex >= 0) {
-        // Atualiza a quantidade se o produto já estiver no carrinho
-        cart[existingItemIndex].quantidade += quantity;
-        
-        // Limita a quantidade ao estoque disponível
-        if (cart[existingItemIndex].quantidade > cart[existingItemIndex].estoque) {
-          cart[existingItemIndex].quantidade = cart[existingItemIndex].estoque;
-        }
-      } else {
-        // Adiciona novo item ao carrinho
-        cart.push({
-          ...product,
-          quantidade: quantity
-        });
-      }
-      
-      this.saveCart(cart);
-      return cart;
-    }
-  
-    // Remover item do carrinho
-    static removeItem(index) {
-      const cart = this.getCart();
-      if (index >= 0 && index < cart.length) {
-        cart.splice(index, 1);
-        this.saveCart(cart);
-      }
-      return cart;
-    }
-  
-    // Atualizar quantidade de um item
-    static updateQuantity(index, quantity) {
-      const cart = this.getCart();
-      
-      if (index >= 0 && index < cart.length) {
-        // Assegura que a quantidade esteja dentro dos limites válidos
-        const newQuantity = Math.max(1, Math.min(quantity, cart[index].estoque));
-        cart[index].quantidade = newQuantity;
-        this.saveCart(cart);
-      }
-      
-      return cart;
-    }
-  
-    // Limpar carrinho
-    static clearCart() {
-      this.saveCart([]);
+      const cartItems = localStorage.getItem(this.CART_KEY);
+      return cartItems ? JSON.parse(cartItems) : [];
+    } catch (error) {
+      console.error('Erro ao recuperar itens do carrinho:', error);
       return [];
     }
-  
-    // Calcular subtotal
-    static getSubtotal() {
-      const cart = this.getCart();
-      return cart.reduce((total, item) => {
-        return total + (parseFloat(item.preco) * item.quantidade);
-      }, 0);
+  }
+
+  /**
+   * Save cart items to localStorage and notify listeners
+   * @param {Array} items - Array of cart items
+   */
+  static saveCartItems(items) {
+    try {
+      if (!this.isLocalStorageAvailable()) return false;
+      
+      localStorage.setItem(this.CART_KEY, JSON.stringify(items));
+      this.notifyListeners(items);
+      return true;
+    } catch (error) {
+      console.error('Erro ao salvar itens no carrinho:', error);
+      return false;
     }
+  }
+
+  /**
+   * Add a product to the cart
+   * @param {Object} product - Product to add to cart
+   * @param {Number} quantity - Quantity to add (default: 1)
+   * @returns {Array} Updated cart items
+   */
+  static addToCart(product, quantity = 1) {
+    const cartItems = this.getCartItems();
+    const existingItem = cartItems.find(item => item.id === product.id);
   
-    // Calcular frete
-    static getShipping() {
-      const subtotal = this.getSubtotal();
-      return subtotal > 200 ? 0 : 15;
+    if (existingItem) {
+      existingItem.quantity += quantity;
+    } else {
+      cartItems.push({
+        ...product,
+        quantity
+      });
     }
+    
+    this.saveCartItems(cartItems);
+    return cartItems;
+  }
   
-    // Calcular total
-    static getTotal() {
-      return this.getSubtotal() + this.getShipping();
+  static loadCartFromStorage() {
+    try {
+      const savedCart = this.getCartItems();
+      this.notifyListeners(savedCart);
+    } catch (error) {
+      console.error('Erro ao carregar carrinho do CartService:', error);
+      this.notifyListeners([]);
     }
   }
   
-  export default CartService;
+  /**
+   * Remove a product from the cart
+   * @param {String|Number} productId - ID of product to remove
+   * @returns {Array} Updated cart items
+   */
+  static removeFromCart(productId) {
+    let cartItems = this.getCartItems();
+    cartItems = cartItems.filter(item => item.id !== productId);
+    this.saveCartItems(cartItems);
+    return cartItems;
+  }
+
+  /**
+   * Update quantity of a product in the cart
+   * @param {String|Number} productId - ID of product to update
+   * @param {Number} quantity - New quantity
+   * @returns {Array} Updated cart items or null if product not found
+   */
+  static updateQuantity(productId, quantity) {
+    const cartItems = this.getCartItems();
+    const itemToUpdate = cartItems.find(item => item.id === productId);
+    
+    if (!itemToUpdate) return null;
+    
+    if (quantity <= 0) {
+      return this.removeFromCart(productId);
+    }
+    
+    itemToUpdate.quantity = quantity;
+    this.saveCartItems(cartItems);
+    return cartItems;
+  }
+  
+  // Add these for increment/decrement functionality
+  static incrementQuantity(productId) {
+    const cartItems = this.getCartItems();
+    const itemToUpdate = cartItems.find(item => item.id === productId);
+    
+    if (!itemToUpdate) return null;
+    
+    itemToUpdate.quantity += 1;
+    this.saveCartItems(cartItems);
+    return cartItems;
+  }
+  
+  static decrementQuantity(productId) {
+    const cartItems = this.getCartItems();
+    const itemToUpdate = cartItems.find(item => item.id === productId);
+    
+    if (!itemToUpdate) return null;
+    
+    if (itemToUpdate.quantity > 1) {
+      itemToUpdate.quantity -= 1;
+      this.saveCartItems(cartItems);
+      return cartItems;
+    } else {
+      // Se quantidade for 1 ou menos, remova o item
+      return this.removeFromCart(productId);
+    }
+  }
+
+  /**
+   * Clear all items from the cart
+   * @returns {Array} Empty array
+   */
+  static clearCart() {
+    this.saveCartItems([]);
+    return [];
+  }
+
+  /**
+   * Calculate the total price of items in the cart
+   * @returns {Number} Total price
+   */
+  static getCartTotal() {
+    const cartItems = this.getCartItems();
+    return cartItems.reduce((total, item) => {
+      return total + (Number(item.preco) * item.quantity);
+    }, 0);
+  }
+
+  /**
+   * Get the total number of items in the cart
+   * @returns {Number} Total count of all items (including quantities)
+   */
+  static getCartCount() {
+    const cartItems = this.getCartItems();
+    return cartItems.reduce((count, item) => {
+      return count + item.quantity;
+    }, 0);
+  }
+  
+  /**
+   * Get the number of unique products in the cart
+   * @returns {Number} Number of unique products
+   */
+  static getUniqueItemsCount() {
+    return this.getCartItems().length;
+  }
+}
+
+export default CartService;
