@@ -56,13 +56,22 @@ export default {
     },
     computed: {
         productImages() {
-            if (this.product?.imagens?.length > 0) {
-                return this.product.imagens.map(img => img.imagem);
-            } else if (this.product?.imagem) {
-                return [this.product.imagem];
-            }
-            return [];
+        let images = [];
+        if (this.product?.imagens?.length > 0) {
+            images = this.product.imagens.map(img => img.imagem);
         }
+        if (this.product?.imagem && !images.includes(this.product.imagem)) {
+            images.push(this.product.imagem);
+        }
+        
+        return images.length > 0 ? images : [];
+    },
+    currentImage() {
+        if (this.productImages.length > 0) {
+            return this.productImages[this.selectedImageIndex];
+        }
+        return '';
+    }
         ,
         currentImage() {
             if (this.productImages.length > 0) {
@@ -141,8 +150,7 @@ export default {
     background-color: white;
     padding: 30px;
     border-radius: 10px;
-    width: 90%;
-    max-width: 60vw;
+    max-width: 85vw;
     position: relative;
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
 }
@@ -186,9 +194,9 @@ export default {
 .thumbnails-sidebar {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    max-height: 300px;
-    overflow-y: auto;
+    gap: 20px;
+    max-width: 450px;
+    overflow-y: none;
 }
 
 .thumbnails-sidebar img {

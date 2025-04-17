@@ -3,7 +3,7 @@
       <div class="container">
         <div class="footer-content">
           <div>
-            <h3 class="footer-title">Maçonaria Elegante</h3>
+            <h3 class="footer-title">Bode Chique</h3>
             <p>Fornecendo artigos maçônicos de qualidade desde 2025. Nossa missão é oferecer produtos que honrem a tradição e simbolismo da Maçonaria.</p>
             <div class="social-links">
               <a v-for="(social, index) in socialLinks" :key="index" :href="social.url" class="social-icon">
@@ -25,13 +25,13 @@
           </div>
           <div>
             <h3 class="footer-title">Contato</h3>
-            <p>Av. Paulista, 1000, São Paulo - SP</p>
-            <p>contato@maconariaelegante.com.br</p>
-            <p>(11) 99999-8888</p>
+            <p>Av. das Avenidas, 1000, Jacarezinho - PR</p>
+            <p>contato@bode.com.br</p>
+            <p>(43) 99999-8888</p>
           </div>
         </div>
         <div class="footer-bottom">
-          <p>&copy; {{ currentYear }} Maçonaria Elegante. Todos os direitos reservados.</p>
+          <p>&copy; {{ currentYear }} <b>Bode Chique</b>. Todos os direitos reservados.</p>
         </div>
       </div>
     </footer>

@@ -27,7 +27,7 @@
         <div v-for="product in filteredProducts" :key="product.id" class="product-card">
           <img @click="productDetail(product)" :src="product.imagem" :alt="product.nome" class="product-img">
           <div class="product-details">
-            <h3 class="product-title">{{ product.nome }}</h3>
+            <h3 class="product-title">{{ truncate(product.nome) }}</h3>
             <p class="product-price">{{ formatPrice(product.preco) }}</p>
             
             <button class="btn add-to-cart" :class="{ added: product.added }" @click="addToCart(product)">
@@ -100,6 +100,10 @@ export default {
         currency: 'BRL'
       }).format(price);
     },
+    truncate(text, maxLength = 50) {
+  if (!text) return '';
+    return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
+  },
     selectCategory(categoryName) {
       this.selectedCategory = categoryName;
       this.$emit('select-category', categoryName);
