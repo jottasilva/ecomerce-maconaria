@@ -31,6 +31,7 @@
   
   .hero h1 {
     font-size: 48px;
+    letter-spacing: 3px;
     margin-bottom: 20px;
   }
   

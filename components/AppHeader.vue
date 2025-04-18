@@ -8,7 +8,7 @@
       <nav :class="{ active: isNavActive }">
         <ul>
           <li><a href="#produtos" @click="toggleNav">Produtos</a></li>
-          <li><a href="#sobre" @click="toggleNav">Sobre Nós</a></li>
+          <li><a href="#" @click="openSobreModal">Sobre Nós</a></li>
           <li><a href="#contato" @click="toggleNav">Contato</a></li>
         </ul>
       </nav>
@@ -32,19 +32,26 @@
         </svg>
       </div>
     </div>
+    
+    <!-- Componente Modal Sobre -->
+    <ModalSobre :isOpen="isSobreModalOpen" @close="closeSobreModal" />
   </header>
 </template>
 
 <script>
+import ModalSobre from './ModalSobre.vue';
+
 export default {
   name: 'AppHeader',
+  components: {
+    ModalSobre
+  },
   props: {
     cartItems: {
       type: Array,
       required: true
     }
   },
-
   computed: {
     cartCount() {
       return (this.cartItems || []).length;
@@ -52,7 +59,8 @@ export default {
   },
   data() {
     return {
-      isNavActive: false
+      isNavActive: false,
+      isSobreModalOpen: false
     }
   },
   methods: {
@@ -61,6 +69,15 @@ export default {
     },
     openCartModal() {
       this.$emit('open-cart');
+    },
+    openSobreModal() {
+      this.isSobreModalOpen = true;
+      if (this.isNavActive) {
+        this.toggleNav(); // Fecha o menu mobile quando abre o modal
+      }
+    },
+    closeSobreModal() {
+      this.isSobreModalOpen = false;
     }
   }
 }
@@ -93,8 +110,8 @@ header {
 }
 
 .logo img {
-  width:60px;
-  height:60px;
+  width: 60px;
+  height: 60px;
 }
 
 nav ul {
@@ -108,6 +125,7 @@ nav a {
   text-decoration: none;
   font-weight: 500;
   transition: color 0.3s;
+  cursor: pointer;
 }
 
 nav a:hover {
@@ -170,5 +188,3 @@ nav a:hover {
   }
 }
 </style>
-
-<!-- Componente do Modal do Carrinho -->

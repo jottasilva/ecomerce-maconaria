@@ -18,7 +18,8 @@
       @select-category="filterByCategory" @add-to-cart="addProductToCart" />
 
     <Testimonials :testimonials="testimonials" />
-    <AppFooter />
+
+    <AppFooter :infos="socials" :contact="contact" />
   </div>
 </template>
 
@@ -31,7 +32,9 @@ import Testimonials from './components/Testimonials.vue';
 import AppFooter from './components/AppFooter.vue';
 import ProductService from './services/ProductsService';
 import CartService from './services/CartService';
-
+import TestmoialsService from './services/TestmonialService';
+import ContactService from './services/ContactsService';
+import SocialsService from './services/SocialsService';
 
 export default {
   name: 'App',
@@ -45,33 +48,21 @@ export default {
   },
   data() {
     return {
-      testimonials: [
-        {
-          text: "Produtos de excelente qualidade e acabamento impecável. O avental que adquiri superou minhas expectativas e tem recebido muitos elogios na Loja.",
-          author: "Irmão Carlos M., São Paulo"
-        },
-        {
-          text: "Entrega rápida e produto conforme descrito. Estou muito satisfeito com minha compra e certamente voltarei a comprar nesta loja.",
-          author: "Irmão Roberto L., Rio de Janeiro"
-        },
-        {
-          text: "Atendimento excepcional e produtos de primeira linha. Recomendo a todos os Irmãos que buscam qualidade e respeito à tradição.",
-          author: "Irmão Eduardo S., Belo Horizonte"
-        }
-      ],
+      testimonials: [],
       isCartOpen: false,
       selectedCategory: 'Todos',
       cartItems: [],
       categories: ['Todos'],
       products: [],
+      socials: [],
       loading: true,
+      contact: [],
       error: null,
       cartCount: 0,
     }
   },
   computed: {
     filteredProducts() {
-      // Se a categoria for "Todos" ou 0, retorne todos os produtos
       if (this.selectedCategory === 'Todos' || this.selectedCategory === 0) {
         return this.products;
       }
@@ -105,6 +96,16 @@ export default {
       try {
         const productsData = await ProductService.getProducts();
         this.products = productsData;
+        
+        const testimonialsData = await TestmoialsService.getTestmonials();
+        this.testimonials = testimonialsData;
+
+        const contactData = await ContactService.getContact();
+        this.contact = contactData;
+
+        const socialsData = await SocialsService.getSocials();
+        this.socials = socialsData;
+
         const uniqueCategories = [...new Set(productsData.map(product => product.categoria))];
         this.categories = ['Todos', ...uniqueCategories];
       } catch (error) {
@@ -129,40 +130,24 @@ export default {
     },
 
     addProductToCart(product) {
-      // Usando o CartService para adicionar ao carrinho
       CartService.addToCart(product);
-
-      // Atualizando o estado local do carrinho
       this.cartItems = CartService.getCartItems();
     },
 
     updateCartItemQuantity({ index, quantity }) {
       const productId = this.cartItems[index].id;
-
-      // Usando o CartService para atualizar a quantidade
       CartService.updateQuantity(productId, quantity);
-
-      // Atualizando o estado local do carrinho
       this.cartItems = CartService.getCartItems();
     },
 
     removeCartItem(index) {
       const productId = this.cartItems[index].id;
-
-      // Usando o CartService para remover o item
       CartService.removeFromCart(productId);
-
-      // Atualizando o estado local do carrinho
       this.cartItems = CartService.getCartItems();
     },
 
     checkoutCart() {
-      alert('Compra finalizada com sucesso!');
-
-      // Limpar o carrinho usando o CartService
       CartService.clearCart();
-
-      // Atualizar o estado local
       this.cartItems = [];
       this.isCartOpen = false;
     }

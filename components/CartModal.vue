@@ -21,6 +21,15 @@
               <circle cx="20" cy="21" r="1"></circle>
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
             </svg>
+            
+            <!-- Componente de login separado -->
+            <GoogleLoginButton 
+              :initial-user="user" 
+              @user-logged-in="onUserLoggedIn" 
+              @user-logged-out="onUserLoggedOut"
+              @login-error="onLoginError"
+            />
+            
             <p>Seu carrinho está vazio</p>
             <button class="btn continue-shopping" @click="close">Continuar Comprando</button>
           </div>
@@ -66,6 +75,7 @@
 
             <div class="cart-actions">
               <button class="btn continue-shopping" @click="close">Continuar Comprando</button>
+
               <button class="btn checkout" @click="checkout" :disabled="isProcessingPayment">
                 <span v-if="isProcessingPayment">Processando...</span>
                 <span v-else>Finalizar Compra</span>
@@ -81,10 +91,15 @@
 
 <script>
 import CartService from '~/services/CartService';
+import { Checkout } from '~/services/payment_checkout';
+// Importar o componente separado
+import GoogleLoginButton from '~/components/GoogleLoginButton.vue';
 
-import axios from 'axios';
 export default {
   name: 'CartModal',
+  components: {
+    GoogleLoginButton // Registrar o componente
+  },
   props: {
     isOpen: {
       type: Boolean,
@@ -93,6 +108,7 @@ export default {
   },
   data() {
     return {
+      user: null,
       cartItems: [],
       unsubscribe: null,
       showMercadoPagoButton: false,
@@ -113,10 +129,22 @@ export default {
     }
   },
   methods: {
+    // Novos métodos para tratar eventos do componente de login
+    onUserLoggedIn(userData) {
+      this.user = userData;
+      console.log('Usuário logado no CartModal:', this.user);
+    },
+    onUserLoggedOut() {
+      this.user = null;
+      console.log('Usuário deslogado no CartModal');
+    },
+    onLoginError(error) {
+      console.error('Erro de login no CartModal:', error);
+    },
+    
     close() {
       this.$emit('close');
     },
-
     formatPrice(value) {
       return new Intl.NumberFormat('pt-BR', {
         style: 'currency',
@@ -134,137 +162,43 @@ export default {
       CartService.removeFromCart(productId);
     },
     async checkout() {
-  try {
-    this.isProcessingPayment = true;
-    console.log('Iniciando checkout...');
-    
-    // Verificar se há itens no carrinho
-    if (this.cartItems.length === 0) {
-      alert('Seu carrinho está vazio. Adicione produtos antes de finalizar a compra.');
-      this.isProcessingPayment = false;
-      return;
-    }
-    
-    this.$emit('checkout');
+      try {
+        this.isProcessingPayment = true;
 
-    // Verificar se os itens têm valores corretos
-    console.log('Verificando itens do carrinho:', this.cartItems);
+        this.showMercadoPagoButton = true;
 
-    // Carregando o script do MercadoPago
-    if (!window.MercadoPago) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = "https://sdk.mercadopago.com/js/v2";
-        script.async = true;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.body.appendChild(script);
-      });
-    }
+        await this.$nextTick();
 
-    const ACCESS_TOKEN = "TEST-605317394854439-041715-ed345146e0127fe79005bb15a6cadb25-54030146";
-    const PUBLIC_KEY = "TEST-b1af6e00-934c-4dc6-90f9-05ac0cebd173";
-
-    // Garantir que há itens no carrinho
-    if (!this.cartItems || this.cartItems.length === 0) {
-      // Tentar carregar os itens novamente do CartService
-      await CartService.loadCartFromStorage();
-      
-      // Se ainda estiver vazio, abortar
-      
-    }
-
-    const items = this.cartItems.map(item => ({
-      title: item.nome || 'Produto',
-      description: item.nome || 'Descrição do produto',
-      quantity: parseInt(item.quantity || 1),
-      currency_id: "BRL",
-      unit_price: Number(parseFloat(item.preco || 0).toFixed(2))
-    }));
-
-    console.log('Items para enviar:', items);
-
-    // Adicione um item mínimo se o array estiver vazio (para testes)
-    if (items.length === 0) {
-      items.push({
-        title: "Produto teste",
-        description: "Produto para teste",
-        quantity: 1,
-        currency_id: "BRL",
-        unit_price: 10.00
-      });
-    }
-
-    const requestData = {
-      items: items,
-      back_urls: {
-        success: `${window.location.origin}/checkout/success`,
-        failure: `${window.location.origin}/checkout/failure`,
-        pending: `${window.location.origin}/checkout/pending`
-      },
-      auto_return: "approved",
-      payer: {
-        email: "test_user@testuser.com"
-      }
-    };
-
-    console.log('Dados para enviar:', JSON.stringify(requestData));
-
-    const response = await axios.post(
-      "https://api.mercadopago.com/checkout/preferences",
-      requestData,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${ACCESS_TOKEN}`
+        const mpButtonContainer = document.getElementById('mp_payment_button');
+        if (!mpButtonContainer) {
+          console.error('Elemento mp_payment_button não encontrado no DOM');
+          alert('Erro ao inicializar o botão de pagamento. Tente novamente.');
+          this.isProcessingPayment = false;
+          return;
         }
+
+        const checkoutProcessor = new Checkout(this);
+        checkoutProcessor.cartItems = this.cartItems;
+        checkoutProcessor.isProcessingPayment = this.isProcessingPayment;
+        checkoutProcessor.$emit = this.$emit.bind(this);
+        checkoutProcessor.$nextTick = this.$nextTick.bind(this);
+        await checkoutProcessor.processPayment();
+
+      } catch (error) {
+        console.error('Erro ao processar checkout:', error);
+        alert('Ocorreu um erro ao processar o pagamento. Por favor, tente novamente.');
+      } finally {
+        this.isProcessingPayment = false;
       }
-    );
-
-    const preferenceData = response.data;
-    console.log('Preferência criada:', preferenceData);
-
-    const mp = new window.MercadoPago(PUBLIC_KEY, {
-      locale: 'pt-BR'
-    });
-
-    this.showMercadoPagoButton = true;
-    await this.$nextTick(); // espera o botão aparecer no DOM
-
-    mp.checkout({
-      preference: {
-        id: preferenceData.id
-      },
-      render: {
-        container: '#mp_payment_button',
-        label: 'Pagar agora'
-      }
-    });
-
-  } catch (error) {
-    console.error('Erro ao processar pagamento:', error);
-    // Adicionar mais detalhes do erro para diagnóstico
-    if (error.response) {
-      console.error('Resposta de erro:', error.response.data);
     }
-    alert('Ocorreu um erro ao processar o pagamento. Por favor, tente novamente.');
-  } finally {
-    this.isProcessingPayment = false;
-  }
-}
-
   },
   mounted() {
-    // Carrega os dados iniciais e se inscreve para atualizações do carrinho
     this.unsubscribe = CartService.subscribe((items) => {
       this.cartItems = items;
     });
-
-    // Força o carregamento inicial do carrinho (caso o subscribe não chame imediatamente)
     CartService.loadCartFromStorage();
   },
   beforeUnmount() {
-    // Cancela a inscrição para evitar vazamento de memória
     if (this.unsubscribe) this.unsubscribe();
   },
   unmounted() {
@@ -272,7 +206,6 @@ export default {
   }
 };
 </script>
-
 
 <style scoped>
 .cart-modal-overlay {
@@ -282,6 +215,8 @@ export default {
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   display: flex;
   justify-content: center;
   align-items: center;
