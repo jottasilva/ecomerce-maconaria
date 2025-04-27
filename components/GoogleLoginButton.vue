@@ -10,8 +10,8 @@
       <div v-else class="user-info">
         <img :src="user.picture" alt="Foto do usuário" class="user-avatar">
         <div class="user-details">
-          <p class="user-name">Bem-vindo, {{ user.name }}</p>
-          <button @click="handleLogout" class="logout-button">Sair</button>
+          <p class="user-name">Bem-vindo, {{ user.name }}<button @click="handleLogout" class="logout-button">Sair</button></p>
+          
         </div>
       </div>
     </div>
@@ -23,7 +23,6 @@
   export default {
     name: 'GoogleLoginButton',
     props: {
-      // Opcional: permite que o componente pai saiba quando o usuário muda
       initialUser: {
         type: Object,
         default: null
@@ -36,11 +35,8 @@
       };
     },
     created() {
-      // Verifica se está em ambiente de browser antes de inicializar
       if (process.client) {
         this.googleService = new GoogleLoginService(import.meta.env.VITE_GOOGLE_CLIENT_ID);
-        
-        // Verifica se já existe um usuário autenticado
         if (this.googleService.isAuthenticated()) {
           this.user = this.googleService.getCurrentUser();
           this.$emit('user-logged-in', this.user);
@@ -50,15 +46,10 @@
     methods: {
       async handleGoogleLogin() {
         try {
-          // Garante que o serviço está inicializado
           if (!this.googleService.isLoaded) {
             await this.googleService.init();
           }
-          
           this.user = await this.googleService.login();
-          console.log('Usuário logado:', this.user);
-          
-          // Emite evento para o componente pai
           this.$emit('user-logged-in', this.user);
         } catch (error) {
           console.error('Erro ao fazer login:', error);
@@ -69,8 +60,6 @@
       handleLogout() {
         this.googleService.logout();
         this.user = null;
-        
-        // Emite evento para o componente pai
         this.$emit('user-logged-out');
       }
     }
@@ -79,10 +68,9 @@
   
   <style scoped>
   .google-login-container {
-    margin: 15px 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-end;
   }
   
   .login-button {
@@ -113,13 +101,12 @@
   
   .user-info {
     display: flex;
+    flex-direction: row;
     align-items: center;
     gap: 12px;
     padding: 10px;
-    background-color: #f8f8f8;
     border-radius: 8px;
     width: 100%;
-    max-width: 300px;
   }
   
   .user-avatar {
@@ -150,6 +137,7 @@
     font-size: 12px;
     cursor: pointer;
     transition: background-color 0.3s;
+    margin: 0 20px;
   }
   
   .logout-button:hover {

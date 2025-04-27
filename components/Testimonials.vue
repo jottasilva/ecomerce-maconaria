@@ -11,7 +11,7 @@
               {{ currentTestimonial.city }}
             </span>
           </p>
-          <p class="testimonial-date">{{ formattedDate }}</p>
+          <p class="testimonial-date">{{ formatarData(currentTestimonial.created_at) }}</p>
         </div>
         <div class="slider-dots">
           <span
@@ -46,19 +46,6 @@ export default {
   computed: {
     currentTestimonial() {
       return this.testimonials[this.currentIndex];
-    },
-    formattedDate() {
-      const meses = [
-        'janeiro', 'fevereiro', 'março', 'abril', 
-        'maio', 'junho', 'julho', 'agosto', 
-        'setembro', 'outubro', 'novembro', 'dezembro'
-      ];
-      
-      const dia = this.currentDate.getDate();
-      const mes = meses[this.currentDate.getMonth()];
-      const ano = this.currentDate.getFullYear();
-      
-      return `${dia} de ${mes} de ${ano}`;
     }
   },
   methods: {
@@ -74,6 +61,24 @@ export default {
       this.intervalId = setInterval(() => {
         this.nextTestimonial();
       }, 5000);
+    },
+    formatarData(dataString) {
+      if (!dataString) return '';
+      
+      const date = new Date(dataString);
+      
+      // Array com os nomes dos meses em português
+      const months = [
+        'janeiro', 'fevereiro', 'março', 'abril', 
+        'maio', 'junho', 'julho', 'agosto', 
+        'setembro', 'outubro', 'novembro', 'dezembro'
+      ];
+      
+      const day = date.getDate();
+      const month = months[date.getMonth()];
+      const year = date.getFullYear();
+      
+      return `${day} de ${month} de ${year}`;
     }
   },
   mounted() {
@@ -118,6 +123,7 @@ export default {
 
 .testimonial-date {
   position: absolute;
+  letter-spacing: 1px;
   bottom: 10px;
   right: 15px;
   color: #ccc;
@@ -128,8 +134,7 @@ export default {
   display: flex;
   justify-content: center;
   gap: 10px;
-  padding-bottom:20px ;
-
+  padding-bottom: 20px;
 }
 
 .dot {

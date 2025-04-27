@@ -11,14 +11,14 @@
       <h2 class="section-title">Produtos em Destaque</h2>
       <div class="categories">
         <button v-for="category in categories" :key="category.id || category" class="category-btn"
-          :class="{ active: selectedCategory === (category.nome || category) }" @click="selectCategory(category.id)">
+          :class="{ active: selectedCategoryName === (category.nome || category) }" @click="selectCategory(category.id, category.nome)">
           {{ category.nome }}
         </button>
       </div>
       <div v-if="isLoading" class="loading">Carregando produtos...</div>
       <div v-else-if="filteredProducts.length === 0" class="no-products">
         <p>Não há produtos disponíveis nesta categoria.</p>
-        <button class="btn return-btn" @click="selectCategory('Todos')">
+        <button class="btn return-btn" @click="selectCategory(0, 'Todos')">
           Voltar para todos os produtos
         </button>
       </div>
@@ -43,7 +43,7 @@
 <script>
 import ProductService from '~/services/ProductsService';
 import CartService from '~/services/CartService';
-import ProductModalDetails from '~/components/ProductModalDetails'; // Certifique-se de importar o componente
+import ProductModalDetails from '~/components/ProductModalDetails';
 
 export default {
   name: 'Products',
@@ -65,7 +65,8 @@ export default {
   data() {
     return {
       categories: [],
-      selectedCategory: 'Todos',
+      selectedCategory: 0, // Armazena o ID da categoria selecionada
+      selectedCategoryName: 'Todos', // Armazena o NOME da categoria selecionada
       isLoading: true,
       localProducts: [],
       cartCount: 0,
@@ -84,8 +85,8 @@ export default {
       handler(newProducts) {
         if (newProducts && newProducts.length) {
           this.localProducts = [...newProducts];
-          if (newProducts.length === 0 && this.selectedCategory !== 'Todos') {
-            this.$emit('empty-category', this.selectedCategory);
+          if (newProducts.length === 0 && this.selectedCategoryName !== 'Todos') {
+            this.$emit('empty-category', this.selectedCategoryName);
           }
         } else {
           this.localProducts = [];
@@ -101,19 +102,33 @@ export default {
       }).format(price);
     },
     truncate(text, maxLength = 50) {
-  if (!text) return '';
-    return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
-  },
-    selectCategory(categoryName) {
-      this.selectedCategory = categoryName;
-      this.$emit('select-category', categoryName);
+      if (!text) return '';
+      return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
+    },
+    // Método atualizado para lidar com ID e nome da categoria
+    selectCategory(categoryId, categoryName) {
+      // Se o categoryName não for fornecido, tente encontrá-lo pelo ID
+      if (!categoryName) {
+        const category = this.categories.find(cat => cat.id === categoryId);
+        if (category) {
+          categoryName = category.nome;
+        } else {
+          // Fallback para casos onde a categoria não é encontrada
+          categoryName = String(categoryId);
+        }
+      }
+      
+      // Atualiza tanto o ID quanto o nome da categoria selecionada
+      this.selectedCategory = categoryId;
+      this.selectedCategoryName = categoryName;
+      
+      // Emite o evento com o ID da categoria
+      this.$emit('select-category', categoryId);
     },
     productDetail(product) {
       this.selectedProduct = product;
       this.isDetailModal = true;
     },
-    
-    // Método para adicionar ao carrinho a partir da lista de produtos
     addToCart(product) {
       const cartItem = CartService.getCartItems().find(item => item.id === product.id);
       const currentQuantity = cartItem ? cartItem.quantity : 0;
@@ -130,8 +145,6 @@ export default {
       }, 1500);
       this.$emit('update-cart-count', CartService.getCartCount());
     },
-    
-    // Novo método para adicionar ao carrinho a partir do modal de detalhes
     handleAddToCart({ product, quantity }) {
       const cartItem = CartService.getCartItems().find(item => item.id === product.id);
       const currentQuantity = cartItem ? cartItem.quantity : 0;
@@ -140,13 +153,9 @@ export default {
         alert('Estoque insuficiente para adicionar a quantidade selecionada deste produto.');
         return;
       }
-      
-      // Adiciona a quantidade especificada ao carrinho
       for (let i = 0; i < quantity; i++) {
         CartService.addToCart(product);
       }
-      
-      // Mostra feedback visual
       if (product.id) {
         const productInGrid = this.filteredProducts.find(p => p.id === product.id);
         if (productInGrid) {
@@ -156,14 +165,9 @@ export default {
           }, 1500);
         }
       }
-      
-      // Atualiza o contador do carrinho
       this.$emit('update-cart-count', CartService.getCartCount());
-      
-      // Opcional: mostra mensagem de confirmação
       alert(`${quantity} unidade(s) de ${product.nome} adicionada(s) ao carrinho!`);
     },
-    
     async loadCategories() {
       try {
         this.isLoading = true;
@@ -173,7 +177,9 @@ export default {
         } else {
           this.categories = categoriesData;
         }
-        this.selectedCategory = 'Todos';
+        // Inicializa com "Todos" selecionado
+        this.selectedCategory = 0;
+        this.selectedCategoryName = 'Todos';
       } catch (error) {
         console.error('Erro ao carregar categorias:', error);
       } finally {
@@ -204,6 +210,7 @@ export default {
 </script>
 
 <style scoped>
+/* O estilo permanece igual ao original */
 .products {
   padding: 80px 0;
   background-color: var(--light);
@@ -212,7 +219,7 @@ export default {
 .categories {
   display: flex;
   justify-content: center;
-  margin-bottom: 40px;
+  margin-bottom: 60px;
   flex-wrap: wrap;
   gap: 10px;
 }

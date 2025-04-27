@@ -3,7 +3,11 @@
     <div class="cart">
       <div class="cart-modal">
         <div class="cart-header">
-          <h2>Seu Carrinho</h2>
+          <section>
+            <h2>Seu Carrinho</h2>
+            <GoogleLoginButton v-if="user" :initial-user="user" @user-logged-in="onUserLoggedIn"
+              @user-logged-out="onUserLoggedOut" @login-error="onLoginError" />
+          </section>
           <button class="close-btn" @click="close">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -21,19 +25,10 @@
               <circle cx="20" cy="21" r="1"></circle>
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
             </svg>
-            
-            <!-- Componente de login separado -->
-            <GoogleLoginButton 
-              :initial-user="user" 
-              @user-logged-in="onUserLoggedIn" 
-              @user-logged-out="onUserLoggedOut"
-              @login-error="onLoginError"
-            />
-            
             <p>Seu carrinho está vazio</p>
             <button class="btn continue-shopping" @click="close">Continuar Comprando</button>
           </div>
-
+          
           <div v-else>
             <div class="cart-items">
               <div v-for="(item, index) in cartItems" :key="item.id" class="cart-item">
@@ -42,13 +37,13 @@
                   <h3>{{ item.nome }}</h3>
                   <p class="item-price">{{ formatPrice(item.preco) }}</p>
                 </div>
-                <div class="item-quantity">
+                <div v-if="!showMercadoPagoButton" class="item-quantity">
                   <button class="qty-btn" @click="decreaseQuantity(item.id)" :disabled="item.quantity <= 1">-</button>
                   <span>{{ item.quantity }}</span>
                   <button class="qty-btn" @click="increaseQuantity(item.id)"
                     :disabled="item.quantity >= item.estoque">+</button>
                 </div>
-                <button class="remove-btn" @click="removeItem(index)">
+                <button v-if="!showMercadoPagoButton" class="remove-btn" @click="removeItem(index)">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6"></polyline>
@@ -72,33 +67,42 @@
                 <span>{{ formatPrice(total) }}</span>
               </div>
             </div>
-
+            <shipping-address-component v-if="user" ref="shippingAddress" :userId="user ? user.id : null"
+              :subtotal="subtotal" @shipping-calculated="onShippingCalculated" />
             <div class="cart-actions">
               <button class="btn continue-shopping" @click="close">Continuar Comprando</button>
 
-              <button class="btn checkout" @click="checkout" :disabled="isProcessingPayment">
-                <span v-if="isProcessingPayment">Processando...</span>
-                <span v-else>Finalizar Compra</span>
-              </button>
+              <div v-if="!user" class="auth-button-container">
+                <GoogleLoginButton :initial-user="user" @user-logged-in="onUserLoggedIn"
+                  @user-logged-out="onUserLoggedOut" @login-error="onLoginError" />
+              </div>
+
+                
+                    <button v-if="user && !showMercadoPagoButton" class="btn checkout" @click="checkout" :disabled="isProcessingPayment">
+                      <span v-if="isProcessingPayment">Processando...</span>
+                      <span v-else>Finalizar Compra</span>
+                    </button>
+ 
+              <div v-if="showMercadoPagoButton" id="mp_payment_button"></div>
             </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-  <div v-if="showMercadoPagoButton" id="mp_payment_button"></div>
 </template>
 
 <script>
 import CartService from '~/services/CartService';
 import { Checkout } from '~/services/payment_checkout';
-// Importar o componente separado
 import GoogleLoginButton from '~/components/GoogleLoginButton.vue';
-
+import ShippingAddressComponent from './ShippingAddressComponent.vue';
+import AddressService from '~/services/AddressService';
 export default {
   name: 'CartModal',
   components: {
-    GoogleLoginButton // Registrar o componente
+    GoogleLoginButton,
+    ShippingAddressComponent
   },
   props: {
     isOpen: {
@@ -112,7 +116,12 @@ export default {
       cartItems: [],
       unsubscribe: null,
       showMercadoPagoButton: false,
-      isProcessingPayment: false
+      isProcessingPayment: false,
+      shippingData: {
+        cost: 0,
+        address: null,
+        complete: false
+      }
     };
   },
   computed: {
@@ -122,17 +131,23 @@ export default {
       }, 0);
     },
     frete() {
+      if (this.shippingData && this.shippingData.cost !== undefined) {
+        return this.shippingData.cost === 0 ? 'Grátis' : this.formatPrice(this.shippingData.cost);
+      }
       return this.subtotal > 200 ? 'Grátis' : this.formatPrice(15);
     },
     total() {
-      return this.subtotal + (this.subtotal > 200 ? 0 : 15);
+      const shippingCost = this.shippingData && this.shippingData.cost !== undefined
+        ? this.shippingData.cost
+        : (this.subtotal > 200 ? 0 : 15);
+
+      return this.subtotal + shippingCost;
     }
   },
   methods: {
-    // Novos métodos para tratar eventos do componente de login
+
     onUserLoggedIn(userData) {
       this.user = userData;
-      console.log('Usuário logado no CartModal:', this.user);
     },
     onUserLoggedOut() {
       this.user = null;
@@ -141,8 +156,11 @@ export default {
     onLoginError(error) {
       console.error('Erro de login no CartModal:', error);
     },
-    
+    onShippingCalculated(data) {
+      this.shippingData = data;
+    },
     close() {
+      this.showMercadoPagoButton = false;
       this.$emit('close');
     },
     formatPrice(value) {
@@ -161,12 +179,49 @@ export default {
       const productId = this.cartItems[index].id;
       CartService.removeFromCart(productId);
     },
+    saveAddressToLocalStorage() {
+      if (this.$refs.shippingAddress && this.user) {
+        const addressData = this.$refs.shippingAddress.getAddressData();
+        if (!addressData || !addressData.isComplete) {
+          alert('Por favor, preencha todos os campos obrigatórios do endereço de entrega.');
+          return;
+        }
+        if (addressData && addressData.isComplete) {
+          const storageKey = `userAddress_${this.user.id}`;
+          localStorage.setItem(storageKey, JSON.stringify(addressData.address));
+          console.log('Endereço salvo no localStorage para o usuário:', this.user.id);
+          return addressData;
+        } else {
+          console.log(addressData)
+          console.warn('Endereço incompleto, não foi salvo no localStorage');
+          return null;
+        }
+      }
+      return null;
+    },
     async checkout() {
       try {
+        if (!this.$refs.shippingAddress || !this.user) {
+          alert('Por favor, faça login para continuar.');
+          return;
+        }
+        const addressData = this.$refs.shippingAddress.getAddressData();
+
+        if (!addressData || !addressData.isComplete) {
+          alert('Por favor, preencha todos os campos obrigatórios do endereço de entrega.');
+          return;
+        }
+
+        const addressSaved = AddressService.saveAddress(this.user.id, addressData.address);
+        if (!addressSaved) {
+          console.warn('Não foi possível salvar o endereço.');
+        }
+
         this.isProcessingPayment = true;
-
-        this.showMercadoPagoButton = true;
-
+        if (!this.showMercadoPagoButton) {
+          this.showMercadoPagoButton = true;
+          await this.$nextTick();
+        }
         await this.$nextTick();
 
         const mpButtonContainer = document.getElementById('mp_payment_button');
@@ -180,6 +235,13 @@ export default {
         const checkoutProcessor = new Checkout(this);
         checkoutProcessor.cartItems = this.cartItems;
         checkoutProcessor.isProcessingPayment = this.isProcessingPayment;
+        checkoutProcessor.shippingData = addressData;
+
+        checkoutProcessor.shippingData = {
+          address: addressData.address,
+          cost: addressData.shippingCost,
+          complete: addressData.isComplete
+        };
         checkoutProcessor.$emit = this.$emit.bind(this);
         checkoutProcessor.$nextTick = this.$nextTick.bind(this);
         await checkoutProcessor.processPayment();
@@ -192,6 +254,7 @@ export default {
       }
     }
   },
+
   mounted() {
     this.unsubscribe = CartService.subscribe((items) => {
       this.cartItems = items;
@@ -201,9 +264,6 @@ export default {
   beforeUnmount() {
     if (this.unsubscribe) this.unsubscribe();
   },
-  unmounted() {
-    if (this.unsubscribe) this.unsubscribe();
-  }
 };
 </script>
 
@@ -387,6 +447,10 @@ export default {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+}
+
+.auth-button-container {
+  flex: 1;
 }
 
 .btn {

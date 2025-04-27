@@ -16,9 +16,8 @@
 
     <Products v-else :products="filteredProducts" :categories="categories" :selectedCategory="selectedCategory"
       @select-category="filterByCategory" @add-to-cart="addProductToCart" />
-
+    <CheckoutSucessModal v-model:isOpen="isCheckoutModalOpen" :transactionParams="checkoutParams" />
     <Testimonials :testimonials="testimonials" />
-
     <AppFooter :infos="socials" :contact="contact" />
   </div>
 </template>
@@ -27,24 +26,27 @@
 import AppHeader from './components/AppHeader.vue';
 import Products from './components/Products.vue';
 import CartModal from './components/CartModal.vue';
+import Hero from './components/Hero.vue';
 import Features from './components/Features.vue';
 import Testimonials from './components/Testimonials.vue';
 import AppFooter from './components/AppFooter.vue';
+import CheckoutSucessModal from './components/CheckoutSucessModal.vue';
 import ProductService from './services/ProductsService';
 import CartService from './services/CartService';
 import TestmoialsService from './services/TestmonialService';
 import ContactService from './services/ContactsService';
 import SocialsService from './services/SocialsService';
-
 export default {
   name: 'App',
   components: {
     AppHeader,
     Products,
     CartModal,
+    Hero,
     Features,
     Testimonials,
-    AppFooter
+    AppFooter,
+    CheckoutSucessModal
   },
   data() {
     return {
@@ -59,6 +61,8 @@ export default {
       contact: [],
       error: null,
       cartCount: 0,
+      isCheckoutModalOpen: false,
+      checkoutParams: {}
     }
   },
   computed: {
@@ -73,18 +77,42 @@ export default {
       return filtered;
     }
   },
+  mounted() {
+    if (window.location.href.includes('checkout/success') || 
+      window.location.search.includes('collection_id') || 
+      window.location.search.includes('payment_id')) {
+    this.openSuccessModal();
+  }
+  },
   created() {
     this.fetchData();
     this.loadCartFromStorage();
     this.unsubscribeCart = CartService.subscribe(this.updateCartCount);
   },
   beforeDestroy() {
-  if (this.unsubscribeCart) {
-    this.unsubscribeCart(); // Remove o listener
-  }
-},
+    if (this.unsubscribeCart) {
+      this.unsubscribeCart(); 
+    }
+  },
 
   methods: {
+    openSuccessModal() {
+      const url = new URL(window.location.href);
+      const urlParams = {
+        collection_id: url.searchParams.get('collection_id'),
+        collection_status: url.searchParams.get('collection_status'),
+        payment_id: url.searchParams.get('payment_id'),
+        status: url.searchParams.get('status'),
+        external_reference: url.searchParams.get('external_reference'),
+        payment_type: url.searchParams.get('payment_type'),
+        merchant_order_id: url.searchParams.get('merchant_order_id'),
+        preference_id: url.searchParams.get('preference_id'),
+        site_id: url.searchParams.get('site_id'),
+        processing_mode: url.searchParams.get('processing_mode')
+      }
+      this.checkoutParams = urlParams;
+      this.isCheckoutModalOpen = true;
+    },
     updateCartCount(cartItems) {
       this.cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
       this.cartItems = cartItems;
@@ -96,7 +124,7 @@ export default {
       try {
         const productsData = await ProductService.getProducts();
         this.products = productsData;
-        
+
         const testimonialsData = await TestmoialsService.getTestmonials();
         this.testimonials = testimonialsData;
 
@@ -150,6 +178,10 @@ export default {
       CartService.clearCart();
       this.cartItems = [];
       this.isCartOpen = false;
+      if (window.location.href.includes('/checkout/success')) {
+        this.openSuccessModal();
+        
+      }
     }
   }
 }
